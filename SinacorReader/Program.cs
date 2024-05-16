@@ -1,23 +1,21 @@
 ﻿using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
-using System.Text.RegularExpressions;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
-namespace LeitorNotaCorretagem
+namespace SinacorReader
 {
-    class Program
+    internal class Program
     {
         static void Main(string[] args)
         {
             string filePath = "E:\\OneDrive\\Juliano\\Financeiro\\Investimentos\\XP - Notas\\XPINC_NOTA_NEGOCIACAO_B3_1_2023.pdf"; // Insira o caminho do seu arquivo PDF aqui
 
-            List<Operacao> operacoes = ExtrairOperacoes(filePath);
-
-            // Exemplo de como usar os dados extraídos
+            NotaNegociacao notaNegociacao = ExtrairNotaCorretagem(filePath);
 
         }
 
-        static List<Operacao> ExtrairOperacoes(string filePath)
+        static NotaNegociacao ExtrairNotaCorretagem(string filePath)
         {
             List<Operacao> operacoes = new List<Operacao>();
 
@@ -27,18 +25,19 @@ namespace LeitorNotaCorretagem
 
                 for (int pageNum = 1; pageNum <= pdfDoc.GetNumberOfPages(); pageNum++)
                 {
-                    PdfPage page = pdfDoc.GetPage(pageNum);
-                    string text = PdfTextExtractor.GetTextFromPage(page);
+                   // PdfPage page = pdfDoc.GetPage(pageNum);
+                   // string text = PdfTextExtractor.GetTextFromPage(page);
                     string paginaTexto = PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(pageNum));
 
-                    decimal taxaLiquidacao = ExtrairTaxaLiquidacao(text);
-                    // decimal valorLiquidoOperacao = ExtrairValorPorFiltro(text, "Valor líquido das operações");
 
-                    decimal valorDasOperacoes = ExtrairValorPorFiltro(text, "Valor das operações");
+                    if (paginaTexto.Contains("Resumo dos Negócios"))
+                    {
+                        CarregarDadosDoClearing(paginaTexto);
+                        CarregarDadosDaBolsa(paginaTexto);
+                        CarregarDadosDoResumoDosNegcios(paginaTexto);
+                    }
 
-
-                    var tabela = ExtrairTabelaNegociacao(text);
-
+                    var tabela = ExtrairTabelaNegociacao(paginaTexto);
                     ParseStringToOperacoes(tabela);
                     // Depois de extrair os dados, adicione o objeto Operacao à lista de operações
                     operacoes.Add(new Operacao
@@ -49,56 +48,90 @@ namespace LeitorNotaCorretagem
 
             }
 
-            return operacoes;
+            return new NotaNegociacao();
         }
 
-        public static decimal ExtrairTaxaLiquidacao(string text)
+        private static ResumoDosNegocios CarregarDadosDoResumoDosNegcios(string text)
         {
-            decimal taxaLiquidacao = 0M;
+            ResumoDosNegocios resumoDosNegocios = new();
+            double debentures = ExtrairValorPorFiltro(text, "Debêntures");
+            double vendasAVista = ExtrairValorPorFiltro(text, "Vendas à vista");
+            double comprasAVista = ExtrairValorPorFiltro(text, "Compras à vista");
+            double opcoesCompras = ExtrairValorPorFiltro(text, "Opções - compras");
+            double opcoesVendas = ExtrairValorPorFiltro(text, "Opções - vendas");
+            double operacoesATermo = ExtrairValorPorFiltro(text, "Operações à termo");
+            double valorOperacoesComTitulosPublicos = ExtrairValorPorFiltro(text, "Valor das oper. c/ títulos púb");
+            double valorDasOperacoes = ExtrairValorPorFiltro(text, "Valor das operações");
 
-            // Expressão regular para encontrar o valor da Taxa de Liquidação
-            Regex regex = new Regex(@"Taxa de liquidação\s+(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)");
+            resumoDosNegocios.Debentures = debentures;
+            resumoDosNegocios.VendasAVista = vendasAVista;
+            resumoDosNegocios.ComprasAVista = comprasAVista;
+            resumoDosNegocios.OpcoesCompras = opcoesCompras;
+            resumoDosNegocios.OpcoesVendas = opcoesVendas;
+            resumoDosNegocios.OperacoesATermo = operacoesATermo;
+            resumoDosNegocios.ValorOperacoesTitulosPublico = valorOperacoesComTitulosPublicos;
+            resumoDosNegocios.ValorDasOperacoes = valorDasOperacoes;
 
-            Match match = regex.Match(text);
-            if (match.Success)
-            {
-                string valorTaxaLiquidaçãoStr = match.Groups[1].Value;
-                // Substituir a vírgula por ponto para garantir que o valor seja interpretado corretamente como decimal
-                valorTaxaLiquidaçãoStr = valorTaxaLiquidaçãoStr.Replace(",", ".");
-                taxaLiquidacao = decimal.Parse(valorTaxaLiquidaçãoStr, CultureInfo.InvariantCulture);
-            }
-
-            return taxaLiquidacao;
+            return resumoDosNegocios;
         }
 
-        public static decimal ExtrairValorPorFiltro(string notaCorretagem, string termoBusca)
+
+        private static Bolsa CarregarDadosDaBolsa(string text)
         {
-            decimal valorFiltrado = 0M;
+            Bolsa bolsa = new();
+            double taxaTermoOpcoes = ExtrairValorPorFiltro(text, "Taxa de termo/opções");
+            double taxaANA = ExtrairValorPorFiltro(text, "Taxa A.N.A.");
+            double emolumentos = ExtrairValorPorFiltro(text, "Emolumentos");
+            double totalBovespaSoma = ExtrairValorPorFiltro(text, "Total Bovespa / Soma");
+
+            bolsa.TaxaANA = taxaANA;
+            bolsa.TaxaDeTermoOpções = taxaTermoOpcoes;
+            bolsa.Emolumentos = emolumentos;
+            bolsa.Total = totalBovespaSoma;
+
+            return bolsa;
+        }
+
+        private static Clearing CarregarDadosDoClearing(string text)
+        {
+            Clearing clearing = new();
+            double valorLiquidoOperacao = ExtrairValorPorFiltro(text, "Valor líquido das operações");
+            double taxaLiquidacao = ExtrairValorPorFiltro(text, "Taxa de liquidação");
+            double taxaRegistro = ExtrairValorPorFiltro(text, "Taxa de Registro");
+            double total = ExtrairValorPorFiltro(text, "Total CBLC");
+
+            clearing.ValorLiquidoOperacoes = valorLiquidoOperacao;
+            clearing.TaxaLiquidacao = taxaLiquidacao;
+            clearing.TaxaRegistro = taxaRegistro;
+            clearing.Total = total;
+
+            return clearing;
+        }
+
+        public static double ExtrairValorPorFiltro(string notaCorretagem, string termoBusca)
+        {
+            double valorFiltrado = 0;
 
             // Use o termo de busca na expressão regular
-            // Regex regex = new Regex($@"{termoBusca}\s+(\d{{1,3}}(?:\.\d{{3}})*(?:,\d{{1,2}})?)");
             Regex regex = new Regex($@"{termoBusca}\s+(\d{{1,3}}(?:\.\d{{3}})*(?:,\d{{2}}))");
 
             Match match = regex.Match(notaCorretagem);
             if (match.Success)
             {
                 string valorStr = match.Groups[1].Value;
-                // Substituir a vírgula por ponto para garantir que o valor seja interpretado corretamente como decimal
-
                 valorFiltrado = ConverterParaDecimal(valorStr);
             }
 
             return valorFiltrado;
         }
-        public static decimal ConverterParaDecimal(string valorString)
+        public static double ConverterParaDecimal(string valorString)
         {
             // Remover o ponto de milhar e substituir a vírgula pelo ponto decimal
             string valorFormatado = valorString.Replace(".", "").Replace(",", ".");
 
-            // Converter para decimal
-            decimal valorDecimal = decimal.Parse(valorFormatado, CultureInfo.InvariantCulture);
+            double valor = double.Parse(valorFormatado, CultureInfo.InvariantCulture);
 
-            return valorDecimal;
+            return valor;
         }
 
         public static string ExtrairTabelaNegociacao(string text)
@@ -185,6 +218,13 @@ namespace LeitorNotaCorretagem
         }
     }
 
+    public class NotaNegociacao
+    {
+        public int NumeroDaNota { get; set; }
+        public DateTime DataPregao { get; set; }
+
+    }
+
     public class Operacao
     {
         public string Q { get; set; }
@@ -206,6 +246,9 @@ namespace LeitorNotaCorretagem
         public double TaxaLiquidacao { get; set; }
         public double TaxaRegistro { get; set; }
         public double Total { get; set; }
+        //Valor líquido das operações D
+        //Taxa de liquidação D
+        //Taxa de Registro
     }
 
     public class Bolsa
@@ -214,10 +257,44 @@ namespace LeitorNotaCorretagem
         public double TaxaANA { get; set; }
         public double Emolumentos { get; set; }
         public double Total { get; set; }
+        //Taxa de termo/opções
+        //Taxa A.N.A.
+        //Emolumento
+    }
+
+    public class CustosOperacionais
+    {
+        public double TaxaOperacional { get; set; }
+        public double Execucao { get; set; }
+        public double TaxaDeCustodia { get; set; }
+        public double Impostos { get; set; }
+        public double IRRFsOperaçõesBase { get; set; }
+        public double Ouitros { get; set; }
+        //Taxa Operacional
+        //Execução
+        //Taxa de Custódia
+        //Impostos
+        //I.R.R.F.s/ operações, base R$0,00
+        //Outros
     }
 
     public class ResumoDosNegocios
     {
-
+        public double Debentures { get; set; }
+        public double VendasAVista { get; set; }
+        public double ComprasAVista { get; set; }
+        public double OpcoesCompras { get; set; }
+        public double OpcoesVendas { get; set; }
+        public double OperacoesATermo { get; set; }
+        public double ValorOperacoesTitulosPublico { get; set; }
+        public double ValorDasOperacoes { get; set; }
+        //Debêntures
+        //Vendas à vista
+        //Compras à vista
+        //Opções - compras
+        //Opções - vendas
+        //Operações à termo
+        //Valor das oper. c/ títulos públ. (v. nom.)
+        //Valor das operações
     }
 }
