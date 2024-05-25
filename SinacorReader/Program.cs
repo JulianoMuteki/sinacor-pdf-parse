@@ -29,12 +29,21 @@ namespace SinacorReader
                     string paginaTexto = PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(pageNum));
                     paginaTexto = CorrigirTextosPorCorretora(paginaTexto);
 
+                    var notaCorretagemLinhas = paginaTexto.Split("\n");
+                    var notaInfos = notaCorretagemLinhas[2].Split(" ");
+
+                    var numeroNota = notaInfos[0];
+                    var dataPregao = notaInfos[2];
+                    var dataLiquidoPara = ExtrairDataPorFiltro(paginaTexto, $"Líquido para");
+                    var valorLiquidoPara = ExtrairValorPorFiltro(paginaTexto, $"Líquido para {dataLiquidoPara}");
+
                     //regex que capture essa frase específica com cada palavra podendo começar com letra maiúscula ou minúscula
                     if (Regex.IsMatch(paginaTexto, @"(?i)Resumo dos Negócios"))
                     {
                         CarregarDadosDoClearing(paginaTexto);
                         CarregarDadosDaBolsa(paginaTexto);
                         CarregarDadosDoResumoDosNegcios(paginaTexto);
+
                     }
 
                     var tabela = ExtrairTabelaNegociacao(paginaTexto);
@@ -47,14 +56,36 @@ namespace SinacorReader
 
             return new NotaNegociacao();
         }
-
-        private static string CorrigirTextosPorCorretora(string paginaTexto)
+        private static Clearing CarregarDadosDoClearing(string text)
         {
-            string colunasXP = "Q Negociação C/V Tipo mercado Prazo Especificação do título Obs. (*) Quantidade Preço / Ajuste Valor Operação / Ajuste D/C";
-            string colunasInter = "Obs (*) Quantidade Preço/Ajuste Valor D/C\nQ Negociação C/V Tipo mercado Prazo Especificação do titulo";
+            Clearing clearing = new();
+            double valorLiquidoOperacao = ExtrairValorPorFiltro(text, "Valor líquido das operações");
+            double taxaLiquidacao = ExtrairValorPorFiltro(text, "Taxa de liquidação");
+            double taxaRegistro = ExtrairValorPorFiltro(text, "Taxa de Registro");
+            double total = ExtrairValorPorFiltro(text, "Total CBLC");
 
-            paginaTexto = paginaTexto.Replace(colunasInter, colunasXP);
-            return paginaTexto;
+            clearing.ValorLiquidoOperacoes = valorLiquidoOperacao;
+            clearing.TaxaLiquidacao = taxaLiquidacao;
+            clearing.TaxaRegistro = taxaRegistro;
+            clearing.Total = total;
+
+            return clearing;
+        }
+
+        private static Bolsa CarregarDadosDaBolsa(string text)
+        {
+            Bolsa bolsa = new();
+            double taxaTermoOpcoes = ExtrairValorPorFiltro(text, "Taxa de termo/opções");
+            double taxaANA = ExtrairValorPorFiltro(text, "Taxa A.N.A.");
+            double emolumentos = ExtrairValorPorFiltro(text, "Emolumentos");
+            double totalBovespaSoma = ExtrairValorPorFiltro(text, "Total Bovespa / Soma");
+
+            bolsa.TaxaANA = taxaANA;
+            bolsa.TaxaDeTermoOpções = taxaTermoOpcoes;
+            bolsa.Emolumentos = emolumentos;
+            bolsa.Total = totalBovespaSoma;
+
+            return bolsa;
         }
 
         private static ResumoDosNegocios CarregarDadosDoResumoDosNegcios(string text)
@@ -79,64 +110,6 @@ namespace SinacorReader
             resumoDosNegocios.ValorDasOperacoes = valorDasOperacoes;
 
             return resumoDosNegocios;
-        }
-
-        private static Bolsa CarregarDadosDaBolsa(string text)
-        {
-            Bolsa bolsa = new();
-            double taxaTermoOpcoes = ExtrairValorPorFiltro(text, "Taxa de termo/opções");
-            double taxaANA = ExtrairValorPorFiltro(text, "Taxa A.N.A.");
-            double emolumentos = ExtrairValorPorFiltro(text, "Emolumentos");
-            double totalBovespaSoma = ExtrairValorPorFiltro(text, "Total Bovespa / Soma");
-
-            bolsa.TaxaANA = taxaANA;
-            bolsa.TaxaDeTermoOpções = taxaTermoOpcoes;
-            bolsa.Emolumentos = emolumentos;
-            bolsa.Total = totalBovespaSoma;
-
-            return bolsa;
-        }
-
-        private static Clearing CarregarDadosDoClearing(string text)
-        {
-            Clearing clearing = new();
-            double valorLiquidoOperacao = ExtrairValorPorFiltro(text, "Valor líquido das operações");
-            double taxaLiquidacao = ExtrairValorPorFiltro(text, "Taxa de liquidação");
-            double taxaRegistro = ExtrairValorPorFiltro(text, "Taxa de Registro");
-            double total = ExtrairValorPorFiltro(text, "Total CBLC");
-
-            clearing.ValorLiquidoOperacoes = valorLiquidoOperacao;
-            clearing.TaxaLiquidacao = taxaLiquidacao;
-            clearing.TaxaRegistro = taxaRegistro;
-            clearing.Total = total;
-
-            return clearing;
-        }
-
-        public static double ExtrairValorPorFiltro(string notaCorretagem, string termoBusca)
-        {
-            double valorFiltrado = 0;
-
-            // Use o termo de busca na expressão regular
-            Regex regex = new Regex($@"{termoBusca}\s+(\d{{1,3}}(?:\.\d{{3}})*(?:,\d{{2}}))");
-
-            Match match = regex.Match(notaCorretagem);
-            if (match.Success)
-            {
-                string valorStr = match.Groups[1].Value;
-                valorFiltrado = ConverterParaDecimal(valorStr);
-            }
-
-            return valorFiltrado;
-        }
-        public static double ConverterParaDecimal(string valorString)
-        {
-            // Remover o ponto de milhar e substituir a vírgula pelo ponto decimal
-            string valorFormatado = valorString.Replace(".", "").Replace(",", ".");
-
-            double valor = double.Parse(valorFormatado, CultureInfo.InvariantCulture);
-
-            return valor;
         }
 
         public static string ExtrairTabelaNegociacao(string text)
@@ -170,6 +143,62 @@ namespace SinacorReader
             // Concatenar todas as linhas encontradas em uma única string
             string resultado = string.Join("\n", linhasNegocios);
             return resultado;
+        }
+
+        private static string CorrigirTextosPorCorretora(string paginaTexto)
+        {
+            string colunasXP = "Q Negociação C/V Tipo mercado Prazo Especificação do título Obs. (*) Quantidade Preço / Ajuste Valor Operação / Ajuste D/C";
+            string colunasInter = "Obs (*) Quantidade Preço/Ajuste Valor D/C\nQ Negociação C/V Tipo mercado Prazo Especificação do titulo";
+
+            paginaTexto = paginaTexto.Replace(colunasInter, colunasXP);
+            return paginaTexto;
+        }
+
+        public static double ExtrairValorPorFiltro(string notaCorretagem, string termoBusca)
+        {
+            double valorFiltrado = 0;
+
+            // Use o termo de busca na expressão regular
+            Regex regex = new Regex($@"{termoBusca}\s+(\d{{1,3}}(?:\.\d{{3}})*(?:,\d{{2}}))");
+
+            Match match = regex.Match(notaCorretagem);
+            if (match.Success)
+            {
+                string valorStr = match.Groups[1].Value;
+                valorFiltrado = ConverterParaDecimal(valorStr);
+            }
+
+            return valorFiltrado;
+        }
+
+        public static string ExtrairDataPorFiltro(string notaCorretagem, string termoBusca)
+        {
+            string valorStr = "N/F";
+
+            // Define the regex pattern to match the phrase "Líquido para" followed by a date in the format dd/MM/yyyy
+            string frase = termoBusca;
+            string pattern = $@"{Regex.Escape(frase)} (\d{{2}}/\d{{2}}/\d{{4}})";
+
+            // Find matches in the input text
+            Match match = Regex.Match(notaCorretagem, pattern);
+
+            // If a match is found, print it
+            if (match.Success)
+            {
+                valorStr = match.Groups[1].Value;
+            }
+
+            return valorStr;
+        }
+
+        public static double ConverterParaDecimal(string valorString)
+        {
+            // Remover o ponto de milhar e substituir a vírgula pelo ponto decimal
+            string valorFormatado = valorString.Replace(".", "").Replace(",", ".");
+
+            double valor = double.Parse(valorFormatado, CultureInfo.InvariantCulture);
+
+            return valor;
         }
 
         public static List<Operacao> ParseStringToOperacoes(string tabela)
