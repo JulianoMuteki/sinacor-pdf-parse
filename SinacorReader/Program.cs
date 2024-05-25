@@ -9,8 +9,7 @@ namespace SinacorReader
     {
         static void Main(string[] args)
         {
-            string filePath = "E:\\OneDrive\\Juliano\\Financeiro\\Investimentos\\XP - Notas\\XPINC_NOTA_NEGOCIACAO_B3_1_2023.pdf"; // Insira o caminho do seu arquivo PDF aqui
-
+             string filePath = "E:\\OneDrive\\Juliano\\Financeiro\\Investimentos\\XP - Notas\\XPINC_NOTA_NEGOCIACAO_B3_1_2023.pdf"; // Insira o caminho do seu arquivo PDF aqui
             NotaNegociacao notaNegociacao = ExtrairNotaCorretagem(filePath);
 
         }
@@ -28,9 +27,10 @@ namespace SinacorReader
                    // PdfPage page = pdfDoc.GetPage(pageNum);
                    // string text = PdfTextExtractor.GetTextFromPage(page);
                     string paginaTexto = PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(pageNum));
+                    paginaTexto = CorrigirTextosPorCorretora(paginaTexto);
 
-
-                    if (paginaTexto.Contains("Resumo dos Negócios"))
+                    //regex que capture essa frase específica com cada palavra podendo começar com letra maiúscula ou minúscula
+                    if (Regex.IsMatch(paginaTexto, @"(?i)Resumo dos Negócios"))
                     {
                         CarregarDadosDoClearing(paginaTexto);
                         CarregarDadosDaBolsa(paginaTexto);
@@ -38,17 +38,23 @@ namespace SinacorReader
                     }
 
                     var tabela = ExtrairTabelaNegociacao(paginaTexto);
-                    ParseStringToOperacoes(tabela);
+
                     // Depois de extrair os dados, adicione o objeto Operacao à lista de operações
-                    operacoes.Add(new Operacao
-                    {
-                        // Atribua os valores extraídos aos campos do objeto Operacao
-                    });
+                    operacoes.AddRange(ParseStringToOperacoes(tabela));
                 }
 
             }
 
             return new NotaNegociacao();
+        }
+
+        private static string CorrigirTextosPorCorretora(string paginaTexto)
+        {
+            string colunasXP = "Q Negociação C/V Tipo mercado Prazo Especificação do título Obs. (*) Quantidade Preço / Ajuste Valor Operação / Ajuste D/C";
+            string colunasInter = "Obs (*) Quantidade Preço/Ajuste Valor D/C\nQ Negociação C/V Tipo mercado Prazo Especificação do titulo";
+
+            paginaTexto = paginaTexto.Replace(colunasInter, colunasXP);
+            return paginaTexto;
         }
 
         private static ResumoDosNegocios CarregarDadosDoResumoDosNegcios(string text)
@@ -74,7 +80,6 @@ namespace SinacorReader
 
             return resumoDosNegocios;
         }
-
 
         private static Bolsa CarregarDadosDaBolsa(string text)
         {
@@ -145,18 +150,18 @@ namespace SinacorReader
             // Iterar pelas linhas para encontrar a seção desejada
             foreach (string linha in linhas)
             {
-                if (linha.Contains("Negócios realizados"))
+                if (Regex.IsMatch(linha, @"(?i)Negócios realizados"))
                 {
                     dentroDaSeção = true;
                     continue; // Ignorar esta linha
                 }
-                else if (linha.Contains("Resumo dos Negócios Resumo Financeiro"))
+                else if (Regex.IsMatch(linha, @"(?i)Resumo dos negócios"))
                 {
                     dentroDaSeção = false;
                     break; // Parar a busca, pois alcançamos o fim da seção desejada
                 }
 
-                if (dentroDaSeção)
+                if (dentroDaSeção && linha.Length > 15)
                 {
                     linhasNegocios.Add(linha);
                 }
@@ -171,8 +176,6 @@ namespace SinacorReader
         {
             var linhas = tabela.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             var operacoes = new List<Operacao>();
-
-
 
             foreach (var linha in linhas.Skip(1)) // Ignora o cabeçalho
             {
@@ -223,6 +226,8 @@ namespace SinacorReader
         public int NumeroDaNota { get; set; }
         public DateTime DataPregao { get; set; }
 
+        public DateTime DataLiquidoPara { get; set; }
+        public double ValorLiquidoPara { get; set; }
     }
 
     public class Operacao
