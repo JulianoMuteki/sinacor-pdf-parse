@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="itext" Version="8.0.4" />
+    <PackageReference Include="itext7" Version="8.0.4" />
   </ItemGroup>
 
 </Project>
