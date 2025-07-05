@@ -5,10 +5,36 @@ Corretoras suportadas:
 - XP
 - Banco Inter
 
+## Estrutura do Projeto
+
+O projeto foi refatorado para separar a lógica de extração em uma biblioteca reutilizável:
+
+- **SinacorPdfParser**: Biblioteca de classes contendo toda a lógica de extração de dados
+- **SinacorReader**: Aplicação console que utiliza a biblioteca para exibir os dados
+
+### Biblioteca SinacorPdfParser
+
+A biblioteca `SinacorPdfParser` pode ser usada independentemente em outros projetos .NET. Veja a documentação completa em [SinacorPdfParser/README.md](SinacorPdfParser/README.md).
+
+#### Uso da Biblioteca
+
+```csharp
+using SinacorPdfParser;
+using SinacorPdfParser.Models;
+
+// Extrair dados de uma nota de corretagem
+var notaNegociacao = SinacorPdfParser.PdfParser.ExtrairNotaCorretagem("caminho/para/nota.pdf");
+
+// Acessar os dados extraídos
+Console.WriteLine($"Número da Nota: {notaNegociacao.NumeroDaNota}");
+Console.WriteLine($"Data do Pregão: {notaNegociacao.DataPregao:dd/MM/yyyy}");
+Console.WriteLine($"Valor Líquido: R$ {notaNegociacao.ValorLiquidoPara:N2}");
+```
+
 ## Como usar
 
 ### 1. Arquivo padrão
-Para ler o arquivo padrão `XPINC_NOTA_NEGOCIACAO_B3_1_2023.pdf`:
+Para ler o arquivo padrão `20-11-2020_67988377_2024033016144001061500.pdf`:
 
 ```bash
 cd SinacorReader
@@ -42,7 +68,7 @@ dotnet run
 
 1. **Argumento de linha de comando** (maior prioridade)
 2. **Variável de ambiente** `PDF_FILE_PATH`
-3. **Arquivo padrão** `XPINC_NOTA_NEGOCIACAO_B3_1_2023.pdf`
+3. **Arquivo padrão** `20-11-2020_67988377_2024033016144001061500.pdf`
 
 ## Exemplos de uso
 
@@ -78,8 +104,56 @@ O programa extrai e exibe:
 - **Custos operacionais**: Taxa operacional, execução, custódia, impostos
 - **Operações**: Lista detalhada de todas as operações realizadas
 
+## Desenvolvimento
+
+### Compilar o projeto completo
+```bash
+dotnet build SinacorPdfParser.sln
+```
+
+### Compilar apenas a biblioteca
+```bash
+cd SinacorPdfParser
+dotnet build
+```
+
+### Compilar apenas a aplicação
+```bash
+cd SinacorReader
+dotnet build
+```
+
+### Executar testes
+```bash
+cd SinacorReader
+dotnet run
+```
+
 ## Requisitos
 
-- .NET 7.0 ou superior
-- iText7 (versão 8.0.4)
-- Arquivo PDF válido de nota de corretagem 
+- .NET 8.0 ou superior
+- iText7 (versão 8.0.2)
+- Arquivo PDF válido de nota de corretagem
+
+## Estrutura de Arquivos
+
+```
+sinacor-pdf-parse/
+├── SinacorPdfParser/           # Biblioteca de classes
+│   ├── Models/                 # Modelos de dados
+│   │   ├── NotaNegociacao.cs
+│   │   ├── Operacao.cs
+│   │   ├── Clearing.cs
+│   │   ├── Bolsa.cs
+│   │   ├── CustosOperacionais.cs
+│   │   └── ResumoDosNegocios.cs
+│   ├── PdfParser.cs           # Classe principal do parser
+│   ├── SinacorPdfParser.csproj
+│   ├── README.md              # Documentação da biblioteca
+│   └── ExemploUso.cs          # Exemplo de uso
+├── SinacorReader/             # Aplicação console
+│   ├── Program.cs             # Interface de usuário
+│   └── SinacorReader.csproj
+├── SinacorPdfParser.sln       # Solução completa
+└── README.md                  # Este arquivo
+``` 
